@@ -66,4 +66,10 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send('Something broke!');
+});
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
