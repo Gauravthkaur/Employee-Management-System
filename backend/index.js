@@ -52,11 +52,8 @@ mongoose
 // Routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/employees", require("./routes/employees"));
-
-// Error handling
-app.use((req, res) => {
-    console.log(`404: ${req.method} ${req.url}`);
-    res.status(404).json({ message: 'Route not found' });
+app.use("/", (req, res) => {
+  res.json({ message: "Welcome to the Employee Management API" });
 });
 
 const PORT = process.env.PORT || 5000;
