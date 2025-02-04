@@ -52,8 +52,16 @@ mongoose
 // Routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/employees", require("./routes/employees"));
-app.use("/",(req,res)=>{
-  res.json({message:"Hello World"})
+
+// Error handling
+app.use((req, res) => {
+    console.log(`404: ${req.method} ${req.url}`);
+    res.status(404).json({ message: 'Route not found' });
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
 
 module.exports = app;
