@@ -11,7 +11,15 @@ const User = require("./models/User");
 const app = express();
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+  origin: 'https://employee-management-system-theta-lac.vercel.app'|| process.env.FRONTEND_URL,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
+}; 
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Ensure uploads directory exists
