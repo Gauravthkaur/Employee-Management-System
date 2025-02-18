@@ -18,8 +18,8 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-const Uploadapi = process.env.REACT_APP_UPLOAD_API || 'http://localhost:5000/uploads';
+const API_URL = process.env.REACT_APP_API_URL || 'https://employee-management-system-9sj4.onrender.com';
+const Uploadapi = process.env.REACT_APP_UPLOAD_API || 'https://employee-management-system-9sj4.onrender.com/uploads';
 
 const EmployeeList = () => {
   const [employees, setEmployees] = useState([]);

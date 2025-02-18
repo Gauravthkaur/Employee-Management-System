@@ -16,7 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_URL = process.env.REACT_APP_API_URL || 'https://employee-management-system-9sj4.onrender.com';
 
 const CreateEmployee = () => {
   const [employee, setEmployee] = useState({
