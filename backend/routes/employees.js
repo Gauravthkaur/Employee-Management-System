@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs').promises;
 const Employee = require('../models/Employee');
 const auth = require('../middleware/auth');
 
@@ -31,32 +32,27 @@ router.get('/', auth, async (req, res) => {
 // Add new employee
 router.post('/', [auth, upload.single('image')], async (req, res) => {
   try {
-    console.log('Received request body:', req.body);
-    console.log('Received file:', req.file);
-
+    
     let imagePath = '';
     if (req.file) {
-      // File was uploaded
       imagePath = `/uploads/${req.file.filename}`;
+
     }
 
     const newEmployee = new Employee({
-      name: req.body.name,
-      email: req.body.email,
-      mobile: req.body.mobile,
-      designation: req.body.designation,
-      gender: req.body.gender,
-      course: req.body.course, // Now a single string, not an array
-      image: imagePath,
+      ...req.body,
+      image: imagePath
     });
 
-    console.log('New employee object:', newEmployee);
-
     const employee = await newEmployee.save();
+    console.log('Saved employee:', employee);
     res.json(employee);
   } catch (err) {
-    console.error('Server error:', err.message);
-    res.status(500).send('Server Error');
+    console.error('Server error:', err);
+    res.status(500).json({ 
+      message: 'Server Error',
+      error: err.message 
+    });
   }
 });
 
@@ -77,48 +73,41 @@ router.get('/:id', auth, async (req, res) => {
 // Update employee
 router.put('/:id', [auth, upload.single('image')], async (req, res) => {
   try {
-    console.log('Updating employee with ID:', req.params.id);
-    console.log('Received request body:', req.body);
-    console.log('Received file:', req.file);
-
-    let courseData;
-    try {
-      courseData = JSON.parse(req.body.course);
-    } catch (error) {
-      console.error('Error parsing course data:', error);
-      courseData = req.body.course || [];
+    const employeeId = req.params.id;
+    const updateData = { ...req.body };
+    
+    // Find existing employee
+    const oldEmployee = await Employee.findById(employeeId);
+    if (!oldEmployee) {
+      return res.status(404).json({ message: 'Employee not found' });
     }
 
-    const updateData = {
-      name: req.body.name,
-      email: req.body.email,
-      mobile: req.body.mobile,
-      designation: req.body.designation,
-      gender: req.body.gender,
-      course: courseData,
-    };
-
+    // Handle image update
     if (req.file) {
-      updateData.image = req.file.path;
+      // Delete old image if exists
+      if (oldEmployee.image) {
+        const oldImagePath = path.join(__dirname, '..', oldEmployee.image);
+        try {
+          await fs.unlink(oldImagePath);
+        } catch (err) {
+          console.warn('Error deleting old image:', err);
+        }
+      }
+      // Set new image path
+      updateData.image = `/uploads/${req.file.filename}`;
     }
 
-    console.log('Update data:', updateData);
-
-    const updatedEmployee = await Employee.findByIdAndUpdate(
-      req.params.id,
+    // Update employee
+    const employee = await Employee.findByIdAndUpdate(
+      employeeId,
       updateData,
       { new: true }
     );
 
-    if (!updatedEmployee) {
-      return res.status(404).json({ msg: 'Employee not found' });
-    }
-
-    console.log('Updated employee:', updatedEmployee);
-    res.json(updatedEmployee);
+    res.json(employee);
   } catch (err) {
-    console.error('Server error:', err.message);
-    res.status(500).send('Server Error');
+    console.error('Update error:', err);
+    res.status(500).json({ message: 'Server Error', error: err.message });
   }
 });
 
@@ -146,6 +135,16 @@ router.delete('/:id', auth, async (req, res) => {
       stack: process.env.NODE_ENV === 'production' ? '🥞' : err.stack
     });
   }
+});
+
+
+router.get('/debug', async (req, res) => {
+  const employees = await Employee.find();
+  res.json(employees.map(emp => ({
+    id: emp._id,
+    name: emp.name,
+    imagePath: emp.image
+  })));
 });
 
 module.exports = router;

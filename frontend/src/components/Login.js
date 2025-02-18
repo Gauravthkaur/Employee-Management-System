@@ -3,6 +3,8 @@ import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { Box, Button, TextField, Typography } from '@mui/material';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const Login = () => {
   const [userName, setUserName] = useState('admin');
   const [password, setPassword] = useState('Tomar');
@@ -11,12 +13,24 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/login`, { userName, password });
-      localStorage.setItem('token', res.data.token);
-      navigate('/dashboard');
+      const response = await axios.post(`${API_URL}/api/auth/login`, 
+        { userName, password },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data?.token) {
+        localStorage.setItem('token', response.data.token);
+        navigate('/dashboard');
+      } else {
+        throw new Error('Invalid response from server');
+      }
     } catch (err) {
-      console.error(err);
-      alert('Invalid credentials');
+      console.error('Login error:', err);
+      alert(err.response?.data?.message || 'Login failed. Please check your credentials.');
     }
   };
 

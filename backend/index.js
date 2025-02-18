@@ -5,6 +5,7 @@ const cors = require("cors");
 const path = require("path");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
+const fs = require("fs");
 const User = require("./models/User");
 
 const app = express();
@@ -12,7 +13,18 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsDir)){
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Current configuration
+app.use("/uploads", express.static(uploadsDir));
+
+// Add console logging to debug path
+console.log("Uploads directory path:", uploadsDir);
 
 // Multer setup for file uploads
 const storage = multer.diskStorage({
@@ -43,9 +55,7 @@ mongoose
       const newAdminUser = new User({ userName: defaultAdminUsername, password: hashedPassword });
       await newAdminUser.save();
       console.log("Default admin user created");
-    } else {
-      console.log("Default admin user already exists");
-    }
+    } 
   })
   .catch((err) => console.log(err));
 

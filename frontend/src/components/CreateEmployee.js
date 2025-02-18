@@ -16,6 +16,8 @@ import {
   Typography,
 } from '@mui/material';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 const CreateEmployee = () => {
   const [employee, setEmployee] = useState({
     name: '',
@@ -26,13 +28,16 @@ const CreateEmployee = () => {
     course: '',
     image: null,
   });
-
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
     const { name, value, type, files } = e.target;
     if (type === 'file') {
-      setEmployee(prev => ({ ...prev, [name]: files[0] }));
+      if (files && files[0]) {
+        console.log('File selected:', files[0]);
+        setEmployee(prev => ({ ...prev, [name]: files[0] }));
+      }
     } else {
       setEmployee(prev => ({ ...prev, [name]: value }));
     }
@@ -41,39 +46,31 @@ const CreateEmployee = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData();
+    
+    // Log form data for debugging
+    console.log('Form data before submit:', employee);
+
     Object.keys(employee).forEach(key => {
       if (key === 'image' && employee[key]) {
-        formData.append(key, employee[key], employee[key].name);
-      } else {
+        console.log('Adding image to form:', employee[key]);
+        formData.append('image', employee[key]);
+      } else if (employee[key]) {
         formData.append(key, employee[key]);
       }
     });
 
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('No token found');
-      }
-
-      const response = await axios.post(`${process.env.REACT_APP_API_URL}/api/employees`, formData, {
+      const response = await axios.post(`${API_URL}/api/employees`, formData, {
         headers: {
-          'x-auth-token': token,
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'multipart/form-data',
         },
       });
-      console.log('Server response:', response.data);
+      console.log('Upload response:', response.data);
       navigate('/employees');
     } catch (err) {
-      console.error('Error submitting form:', err);
-      if (err.response) {
-        console.error('Response data:', err.response.data);
-        console.error('Response status:', err.response.status);
-        console.error('Response headers:', err.response.headers);
-      } else if (err.request) {
-        console.error('No response received:', err.request);
-      } else {
-        console.error('Error setting up request:', err.message);
-      }
+      console.error('Upload error:', err);
+      setError(err.response?.data?.message || 'Failed to create employee');
     }
   };
 
@@ -82,6 +79,11 @@ const CreateEmployee = () => {
       <Typography variant="h4" gutterBottom>
         Create Employee
       </Typography>
+      {error && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {error}
+        </Typography>
+      )}
       <form onSubmit={handleSubmit}>
         <TextField
           fullWidth
@@ -146,15 +148,33 @@ const CreateEmployee = () => {
             <MenuItem value="MCA">MCA</MenuItem>
             <MenuItem value="BCA">BCA</MenuItem>
             <MenuItem value="BSC">BSC</MenuItem>
+            <MenuItem value="BSC">BTech</MenuItem>
           </Select>
         </FormControl>
-        <input
-          type="file"
-          name="image"
-          onChange={handleChange}
-          accept="image/*"
-          style={{ margin: '10px 0' }}
-        />
+        <Box sx={{ margin: '20px 0' }}>
+          <input
+            type="file"
+            name="image"
+            onChange={handleChange}
+            accept="image/*"
+            style={{ display: 'none' }}
+            id="image-upload"
+          />
+          <label htmlFor="image-upload">
+            <Button 
+              variant="outlined" 
+              component="span"
+              fullWidth
+            >
+              {employee.image ? 'Change Image' : 'Upload Image'}
+            </Button>
+          </label>
+          {employee.image && (
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              Selected file: {employee.image.name}
+            </Typography>
+          )}
+        </Box>
         <Button type="submit" variant="contained" color="primary" fullWidth>
           Create Employee
         </Button>

@@ -18,23 +18,57 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const Uploadapi = process.env.REACT_APP_UPLOAD_API || 'http://localhost:5000/uploads';
+
 const EmployeeList = () => {
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
+
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return '/placeholder.png';
+    return imagePath.startsWith('http') 
+      ? imagePath 
+      : `${API_URL}${imagePath}`;
+  };
 
   useEffect(() => {
     const fetchEmployees = async () => {
-      const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/employees`, {
-        headers: { 'x-auth-token': localStorage.getItem('token') },
-      });
-      console.log(res.data)
-      setEmployees(res.data);
-      setFilteredEmployees(res.data);
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      try {
+        const res = await axios.get(`${API_URL}/api/employees`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (res.data) {
+          console.log('Fetched Employees:', res.data); // Debugging employee image paths
+          setEmployees(res.data);
+          setFilteredEmployees(res.data);
+        }
+      } catch (err) {
+        console.error('Error fetching employees:', err);
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/login');
+        }
+        setError(err.response?.data?.message || 'Failed to fetch employees');
+      }
     };
+
     fetchEmployees();
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     if (!employees || !searchTerm) {
@@ -42,36 +76,43 @@ const EmployeeList = () => {
       return;
     }
 
-    const results = employees.filter(employee => {
-      const  name= employee.name?.toLowerCase()?? '';
-      const id = employee._id?.toLowerCase() ?? '';
-      const email = employee.email?.toLowerCase() ?? '';
-      const createdDate = employee.createdDate ? new Date(employee.createdDate).toLocaleDateString() : '';
-      const course = employee.course?.toLowerCase() ?? '';
-      const term = searchTerm.toLowerCase();
-      
-
-      return id.includes(term) || 
-             email.includes(term) || 
-             createdDate.toLowerCase().includes(term) ||
-             name.toLowerCase().includes(term)||
-             course.includes(term);
-    });
+    const term = searchTerm.toLowerCase();
+    const results = employees.filter(employee => (
+      employee.mobile?.toLowerCase().includes(term) ||
+      employee.name?.toLowerCase().includes(term) ||
+      employee._id?.toLowerCase().includes(term) ||
+      employee.email?.toLowerCase().includes(term) ||
+      (employee.createdDate ? new Date(employee.createdDate).toLocaleDateString().toLowerCase().includes(term) : false) ||
+      employee.course?.toLowerCase().includes(term)
+    ));
     setFilteredEmployees(results);
   }, [searchTerm, employees]);
 
   const deleteEmployee = async (id) => {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
     try {
-      await axios.delete(`${process.env.REACT_APP_API_URL}/api/employees/${id}`, {
+      await axios.delete(`${API_URL}/api/employees/${id}`, {
         headers: {
-          'x-auth-token': localStorage.getItem('token')
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
       setEmployees(prevEmployees => prevEmployees.filter(emp => emp._id !== id));
+      setFilteredEmployees(prevEmployees => prevEmployees.filter(emp => emp._id !== id));
       alert('Employee deleted successfully');
     } catch (error) {
-      console.error('Error deleting employee:', error.response ? error.response.data : error.message);
-      alert('Failed to delete employee');
+      console.error('Error deleting employee:', error);
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+      }
+      alert(error.response?.data?.message || 'Failed to delete employee');
     }
   };
 
@@ -118,7 +159,20 @@ const EmployeeList = () => {
               <TableRow key={employee._id}>
                 <TableCell>
                   <div className='logo-container'>
-                    <img src="/user-512.png" alt="logo" />
+                    <img 
+                      src={getImageUrl(employee.image)}
+                      alt={employee.name}
+                      onError={(e) => {
+                        console.warn(`Error loading image for ${employee.name}:`, employee.image);
+                        e.target.src = '/placeholder.png';
+                      }}
+                      style={{
+                        width: '50px',
+                        height: '50px',
+                        objectFit: 'cover',
+                        borderRadius: '50%'
+                      }}
+                    />
                     <div>{employee.name}</div>
                   </div>
                 </TableCell>
@@ -126,7 +180,7 @@ const EmployeeList = () => {
                 <TableCell>{employee.mobile}</TableCell>
                 <TableCell>{employee.designation}</TableCell>
                 <TableCell>{employee.gender}</TableCell>
-                <TableCell>{employee.course} </TableCell>
+                <TableCell>{employee.course}</TableCell>
                 <TableCell>{employee._id}</TableCell>
                 <TableCell>{new Date(employee.createdDate).toLocaleDateString()}</TableCell>
                 <TableCell>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
@@ -14,7 +14,11 @@ import {
   Radio,
   Typography,
   Alert,
+  CircularProgress,
 } from '@mui/material';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const EditEmployee = () => {
   const [employee, setEmployee] = useState({
@@ -28,36 +32,56 @@ const EditEmployee = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [imagePreview, setImagePreview] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const navigate = useNavigate();
   const { id } = useParams();
 
-  useEffect(() => {
-    const fetchEmployee = async () => {
-      try {
-        setLoading(true);
-        console.log('Fetching employee with ID:', id);
-        const res = await axios.get(`${process.env.REACT_APP_API_URL}/api/employees/${id}`, {
-          headers: { 'x-auth-token': localStorage.getItem('token') },
-        });
-        console.log('Received employee data:', res.data);
+  const fetchEmployee = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await axios.get(`${API_URL}/api/employees/${id}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (res.data) {
         setEmployee(res.data);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching employee:', err);
-        setError('Failed to fetch employee data. Please try again.');
-        setLoading(false);
+        if (res.data.image) {
+          setImagePreview(`${API_URL}${res.data.image}`);
+        }
       }
-    };
+    } catch (err) {
+      console.error('Error fetching employee:', err);
+      setError(err.response?.data?.message || 'Failed to fetch employee data');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, navigate]);
+
+  useEffect(() => {
     fetchEmployee();
-  }, [id]);
+  }, [fetchEmployee]);
 
   const handleChange = (e) => {
     const { name, value, type, files } = e.target;
   
     // Handle file inputs
     if (type === 'file') {
-      setEmployee(prev => ({ ...prev, [name]: files[0] }));
+      if (files && files[0]) {
+        const file = files[0];
+        setEmployee(prev => ({ ...prev, [name]: file }));
+        // Create preview URL for the new image
+        setImagePreview(URL.createObjectURL(file));
+      }
     } 
     // Handle the 'course' field as a single selection input
     else if (name === 'course') {
@@ -69,143 +93,214 @@ const EditEmployee = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData();
-    for (let key in employee) {
-      if (employee[key] !== null && employee[key] !== undefined) {
-        if (Array.isArray(employee[key])) {
-          employee[key].forEach(value => formData.append(key, value));
-        } else {
-          formData.append(key, employee[key]);
-        }
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Validate file type and size
+      if (!file.type.startsWith('image/')) {
+        setError('Please upload an image file');
+        return;
       }
-    }
-    try {
-      await axios.put(`${process.env.REACT_APP_API_URL}/api/employees/${id}`, formData, {
-        headers: {
-          'x-auth-token': localStorage.getItem('token'),
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      navigate('/employees');
-    } catch (err) {
-      console.error(err);
-      setError('Failed to update employee. Please try again.');
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        setError('Image size should be less than 5MB');
+        return;
+      }
+
+      setEmployee(prev => ({ ...prev, image: file }));
+      setImagePreview(URL.createObjectURL(file));
+      setError('');
     }
   };
 
-  if (loading) {
-    return <Typography>Loading...</Typography>;
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+  
+    setIsSubmitting(true);
+    setError('');
 
-  if (error) {
-    return <Alert severity="error">{error}</Alert>;
-  }
+    const formData = new FormData();
+    
+    // Add all text fields
+    Object.keys(employee).forEach(key => {
+      if (key !== 'image' && employee[key]) {
+        formData.append(key, employee[key]);
+      }
+    });
+    
+    // Add image only if a new one is selected
+    if (employee.image instanceof File) {
+      formData.append('image', employee.image);
+    }
+  
+    try {
+      const response = await axios.put(`${API_URL}/api/employees/${id}`, formData, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      console.log('Update response:', response.data);
+      await fetchEmployee();
+      navigate('/employees');
+    } catch (err) {
+      console.error('Update error:', err);
+      setError(err.response?.data?.message || 'Failed to update employee');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-      }}
-    >
+    <Box sx={{ maxWidth: 600, margin: '40px auto', padding: '20px' }}>
       <Typography variant="h4" gutterBottom>
         Edit Employee
       </Typography>
-      <form onSubmit={handleSubmit}>
-        <Box sx={{ mb: 2 }}>
-          <TextField
-            label="Name"
-            variant="outlined"
-            name="name"
-            value={employee.name}
-            onChange={handleChange}
-            required
-            fullWidth
-          />
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      {loading ? (
+        <Box sx={{ textAlign: 'center', py: 3 }}>
+          <CircularProgress />
         </Box>
-        <Box sx={{ mb: 2 }}>
-          <TextField
-            label="Email"
-            variant="outlined"
-            name="email"
-            value={employee.email}
-            onChange={handleChange}
-            required
-            fullWidth
-          />
-        </Box>
-        <Box sx={{ mb: 2 }}>
-          <TextField
-            label="Mobile"
-            variant="outlined"
-            name="mobile"
-            value={employee.mobile}
-            onChange={handleChange}
-            required
-            fullWidth
-          />
-        </Box>
-        <Box sx={{ mb: 2 }}>
-          <FormControl fullWidth>
-            <InputLabel>Designation</InputLabel>
-            <Select
-              name="designation"
-              value={employee.designation}
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <Box sx={{ mb: 2 }}>
+            <TextField
+              label="Name"
+              variant="outlined"
+              name="name"
+              value={employee.name}
               onChange={handleChange}
               required
-            >
-              <MenuItem value="HR">HR</MenuItem>
-              <MenuItem value="Manager">Manager</MenuItem>
-              <MenuItem value="Sales">Sales</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-        <Box sx={{ mb: 2 }}>
-          <FormControl component="fieldset">
-            <Typography component="legend">Gender</Typography>
-            <RadioGroup
-              name="gender"
-              value={employee.gender}
-              onChange={handleChange}
-              row
-            >
-              <FormControlLabel value="Male" control={<Radio />} label="Male" />
-              <FormControlLabel value="Female" control={<Radio />} label="Female" />
-            </RadioGroup>
-          </FormControl>
-        </Box>
-        <Box sx={{ mb: 2 }}>
-          <FormControl fullWidth>
-            <InputLabel>Course</InputLabel>
-            <Select
-              name="course"
-              value={employee.course}
+              fullWidth
+            />
+          </Box>
+          <Box sx={{ mb: 2 }}>
+            <TextField
+              label="Email"
+              variant="outlined"
+              name="email"
+              value={employee.email}
               onChange={handleChange}
               required
-            >
-              <MenuItem value="MCA">MCA</MenuItem>
-              <MenuItem value="BCA">BCA</MenuItem>
-              <MenuItem value="BSC">BSC</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-        <Box sx={{ mb: 2 }}>
-          <input
-            type="file"
-            name="image"
-            onChange={handleChange}
-            accept="image/*"
-          />
-        </Box>
-        <Button type="submit" variant="contained" color="primary" fullWidth>
-          Update Employee
-        </Button>
-      </form>
+              fullWidth
+            />
+          </Box>
+          <Box sx={{ mb: 2 }}>
+            <TextField
+              label="Mobile"
+              variant="outlined"
+              name="mobile"
+              value={employee.mobile}
+              onChange={handleChange}
+              required
+              fullWidth
+            />
+          </Box>
+          <Box sx={{ mb: 2 }}>
+            <FormControl fullWidth>
+              <InputLabel>Designation</InputLabel>
+              <Select
+                name="designation"
+                value={employee.designation}
+                onChange={handleChange}
+                required
+              >
+                <MenuItem value="HR">HR</MenuItem>
+                <MenuItem value="Manager">Manager</MenuItem>
+                <MenuItem value="Sales">Sales</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Box sx={{ mb: 2 }}>
+            <FormControl component="fieldset">
+              <Typography component="legend">Gender</Typography>
+              <RadioGroup
+                name="gender"
+                value={employee.gender}
+                onChange={handleChange}
+                row
+              >
+                <FormControlLabel value="Male" control={<Radio />} label="Male" />
+                <FormControlLabel value="Female" control={<Radio />} label="Female" />
+              </RadioGroup>
+            </FormControl>
+          </Box>
+          <Box sx={{ mb: 2 }}>
+            <FormControl fullWidth>
+              <InputLabel>Course</InputLabel>
+              <Select
+                name="course"
+                value={employee.course}
+                onChange={handleChange}
+                required
+              >
+                <MenuItem value="MCA">MCA</MenuItem>
+                <MenuItem value="BCA">BCA</MenuItem>
+                <MenuItem value="BSC">BSC</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          <Box sx={{ mb: 3 }}>
+            {imagePreview && (
+              <Box sx={{ textAlign: 'center', mb: 2 }}>
+                <img
+                  src={imagePreview}
+                  alt="Employee"
+                  style={{
+                    width: '150px',
+                    height: '150px',
+                    objectFit: 'cover',
+                    borderRadius: '50%',
+                  }}
+                />
+              </Box>
+            )}
+            <input
+              type="file"
+              accept="image/*"
+              id="image-upload"
+              style={{ display: 'none' }}
+              onChange={handleImageChange}
+            />
+            <label htmlFor="image-upload">
+              <Button
+                variant="outlined"
+                component="span"
+                fullWidth
+                startIcon={<CloudUploadIcon />}
+              >
+                {imagePreview ? 'Change Image' : 'Upload Image'}
+              </Button>
+            </label>
+          </Box>
+
+          <Button
+            type="submit"
+            variant="contained"
+            color="primary"
+            fullWidth
+            disabled={isSubmitting}
+            sx={{ mt: 3 }}
+          >
+            {isSubmitting ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : (
+              'Update Employee'
+            )}
+          </Button>
+        </form>
+      )}
     </Box>
   );
 };

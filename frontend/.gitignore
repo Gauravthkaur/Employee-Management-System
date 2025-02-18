@@ -24,3 +24,4 @@ yarn-error.log*
 
 # Ignore node_modules in backend
 /backend/node_modules
+/frontend/node_modules
