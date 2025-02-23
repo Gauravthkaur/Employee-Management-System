@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
-import { Box, Button, TextField, Typography } from '@mui/material';
+import { Box, Button, CircularProgress, TextField, Typography } from '@mui/material';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://employee-management-system-9sj4.onrender.com';
 
 const Login = () => {
   const [userName, setUserName] = useState('admin');
   const [password, setPassword] = useState('Tomar');
+  const [loading,setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true)
+    
     try {
       const response = await axios.post(`${API_URL}/api/auth/login`, 
         { userName, password },
@@ -25,6 +28,7 @@ const Login = () => {
       if (response.data?.token) {
         localStorage.setItem('token', response.data.token);
         navigate('/dashboard');
+        setLoading(false)
       } else {
         throw new Error('Invalid response from server');
       }
@@ -38,6 +42,7 @@ const Login = () => {
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 8 }}>
       <Typography variant="h4" component="h1" gutterBottom>
         Login
+       
       </Typography>
       <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
         <TextField
@@ -70,7 +75,7 @@ const Login = () => {
           variant="contained"
           sx={{ mt: 3, mb: 2 }}
         >
-          Sign In
+           {loading ? <CircularProgress size={24} color='inherit'  /> : 'Sign In' }
         </Button>
         <Link to="/register" variant="body2">
           {"Don't have an account? Sign Up"}

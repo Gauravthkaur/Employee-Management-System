@@ -116,14 +116,27 @@ router.delete('/:id', auth, async (req, res) => {
   try {
     console.log('Attempting to delete employee with ID:', req.params.id);
     
+    // First find the employee to get image path
     const employee = await Employee.findById(req.params.id);
     
     if (!employee) {
       console.log('Employee not found with ID:', req.params.id);
       return res.status(404).json({ msg: 'Employee not found' });
     }
+
+    // Delete the employee's image file if it exists
+    if (employee.image) {
+      const imagePath = path.join(__dirname, '..', employee.image);
+      try {
+        await fs.unlink(imagePath);
+        console.log('Successfully deleted image file:', imagePath);
+      } catch (err) {
+        console.warn('Error deleting image file:', err);
+      }
+    }
     
-    await Employee.findOneAndDelete(req.params.id);  // Changed from findByIdAndRemove
+    // Use findByIdAndDelete instead of findOneAndDelete
+    await Employee.findByIdAndDelete(req.params.id);
     
     console.log('Successfully deleted employee with ID:', req.params.id);
     res.json({ msg: 'Employee removed' });
@@ -131,12 +144,10 @@ router.delete('/:id', auth, async (req, res) => {
     console.error('Error in delete route:', err);
     res.status(500).json({
       msg: 'Server Error',
-      error: err.message,
-      stack: process.env.NODE_ENV === 'production' ? '🥞' : err.stack
+      error: err.message
     });
   }
 });
-
 
 router.get('/debug', async (req, res) => {
   const employees = await Employee.find();

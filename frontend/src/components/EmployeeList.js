@@ -14,25 +14,47 @@ import {
   Box,
   Typography,
   TextField,
-  InputAdornment
+  InputAdornment,
+  CircularProgress
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://employee-management-system-9sj4.onrender.com';
-const Uploadapi = process.env.REACT_APP_UPLOAD_API || 'https://employee-management-system-9sj4.onrender.com/uploads';
 
 const EmployeeList = () => {
   const [employees, setEmployees] = useState([]);
   const [filteredEmployees, setFilteredEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [imageLoadErrors, setImageLoadErrors] = useState({});
   const navigate = useNavigate();
 
-  const getImageUrl = (imagePath) => {
+  // Function to sort employees by creation date (newest first)
+  const sortEmployeesByDate = (employeesArray) => {
+    return [...employeesArray].sort((a, b) => {
+      return new Date(b.createdDate) - new Date(a.createdDate);
+    });
+  };
+
+  const getImageUrl = (imagePath, employeeId) => {
+    if (imageLoadErrors[employeeId]) {
+      return '/placeholder.png';
+    }
+
     if (!imagePath) return '/placeholder.png';
-    return imagePath.startsWith('http') 
-      ? imagePath 
-      : `${API_URL}${imagePath}`;
+    
+    if (imagePath.startsWith('http')) return imagePath;
+    
+    const normalizedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+    return `${API_URL}${normalizedPath}`;
+  };
+
+  const handleImageError = (employeeId) => {
+    setImageLoadErrors(prev => ({
+      ...prev,
+      [employeeId]: true
+    }));
   };
 
   useEffect(() => {
@@ -45,6 +67,7 @@ const EmployeeList = () => {
       }
 
       try {
+        setLoading(true);
         const res = await axios.get(`${API_URL}/api/employees`, {
           headers: { 
             'Authorization': `Bearer ${token}`,
@@ -53,9 +76,11 @@ const EmployeeList = () => {
         });
         
         if (res.data) {
-          console.log('Fetched Employees:', res.data); // Debugging employee image paths
-          setEmployees(res.data);
-          setFilteredEmployees(res.data);
+          setImageLoadErrors({});
+          // Sort employees before setting state
+          const sortedEmployees = sortEmployeesByDate(res.data);
+          setEmployees(sortedEmployees);
+          setFilteredEmployees(sortedEmployees);
         }
       } catch (err) {
         console.error('Error fetching employees:', err);
@@ -64,6 +89,8 @@ const EmployeeList = () => {
           navigate('/login');
         }
         setError(err.response?.data?.message || 'Failed to fetch employees');
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -72,7 +99,8 @@ const EmployeeList = () => {
 
   useEffect(() => {
     if (!employees || !searchTerm) {
-      setFilteredEmployees(employees);
+      // Ensure the filtered list is also sorted
+      setFilteredEmployees(sortEmployeesByDate(employees));
       return;
     }
 
@@ -85,7 +113,8 @@ const EmployeeList = () => {
       (employee.createdDate ? new Date(employee.createdDate).toLocaleDateString().toLowerCase().includes(term) : false) ||
       employee.course?.toLowerCase().includes(term)
     ));
-    setFilteredEmployees(results);
+    // Sort the filtered results
+    setFilteredEmployees(sortEmployeesByDate(results));
   }, [searchTerm, employees]);
 
   const deleteEmployee = async (id) => {
@@ -95,24 +124,38 @@ const EmployeeList = () => {
       navigate('/login');
       return;
     }
-
+  
+    if (!window.confirm('Are you sure you want to delete this employee?')) {
+      return;
+    }
+  
     try {
-      await axios.delete(`${API_URL}/api/employees/${id}`, {
+      const response = await axios.delete(`${API_URL}/api/employees/${id}`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${token}`
         }
       });
-      setEmployees(prevEmployees => prevEmployees.filter(emp => emp._id !== id));
-      setFilteredEmployees(prevEmployees => prevEmployees.filter(emp => emp._id !== id));
-      alert('Employee deleted successfully');
+  
+      if (response.status === 200) {
+        const updatedEmployees = employees.filter(emp => emp._id !== id);
+        // Sort the updated list
+        const sortedEmployees = sortEmployeesByDate(updatedEmployees);
+        setEmployees(sortedEmployees);
+        setFilteredEmployees(sortedEmployees);
+        alert('Employee deleted successfully');
+      }
     } catch (error) {
-      console.error('Error deleting employee:', error);
       if (error.response?.status === 401) {
         localStorage.removeItem('token');
         navigate('/login');
+      } else if (error.response?.status === 404) {
+        alert('Employee not found');
+        const updatedEmployees = employees.filter(emp => emp._id !== id);
+        setEmployees(sortEmployeesByDate(updatedEmployees));
+        setFilteredEmployees(sortEmployeesByDate(updatedEmployees));
+      } else {
+        alert('Failed to delete employee. Please try again.');
       }
-      alert(error.response?.data?.message || 'Failed to delete employee');
     }
   };
 
@@ -155,22 +198,28 @@ const EmployeeList = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredEmployees.map((employee) => (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    <CircularProgress />
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ) : filteredEmployees.map((employee) => (
               <TableRow key={employee._id}>
                 <TableCell>
-                  <div className='logo-container'>
+                  <div className='logo-container' style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <img 
-                      src={getImageUrl(employee.image)}
+                      src={getImageUrl(employee.image, employee._id)}
                       alt={employee.name}
-                      onError={(e) => {
-                        console.warn(`Error loading image for ${employee.name}:`, employee.image);
-                        e.target.src = '/placeholder.png';
-                      }}
+                      onError={() => handleImageError(employee._id)}
                       style={{
                         width: '50px',
                         height: '50px',
                         objectFit: 'cover',
-                        borderRadius: '50%'
+                        borderRadius: '50%',
+                        border: '1px solid #ddd'
                       }}
                     />
                     <div>{employee.name}</div>
@@ -205,7 +254,7 @@ const EmployeeList = () => {
           </TableBody>
         </Table>
       </TableContainer>
-    </Box>
+    </Box>  
   );
 };
 
